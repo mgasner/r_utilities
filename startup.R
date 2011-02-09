@@ -1,9 +1,12 @@
-library(veritable.r)
-options(veritable.username = "fastmax", veritable.server = "dev.naviasystems.com")
-#options(veritable.username = "fastmax2", veritable.server = "dev.naviasystems.com")
-#options(veritable.username = "veritable", veritable.server = "127.0.0.1")
+# February 8, 2011
+# max@naviasystems.com
 
-# don't forget to use setwd() to set the working directory
-
-# what follows belongs in ~/.Rconfig
-Sys.setenv(SWEAVE_STYLEPATH_DEFAULT=TRUE)
+startup <- function(username = "fastmax", server = "dev.naviasystems.com", wd = "~/") {
+	Sys.setenv(SWEAVE_STYLEPATH_DEFAULT=TRUE)
+	
+	library(veritable.r)
+	
+	setwd(wd)
+	
+	options(veritable.username = username, veritable.server = server)
+}
