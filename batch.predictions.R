@@ -47,3 +47,14 @@ get.batch.predictions <- function(handles, dataset) {
 	
 	results
 }
+
+# this shit is totally broken by the seatbelts
+reconstitute.batch.predictions <- function(results, dataset) {
+	reconstituted <- results[[1]]@data
+	for (i in 2:length(results)) {
+		reconstituted <- rbind(reconstituted, results[[i]]@data)
+	}
+	reconstituted <- as.veritable.dataset(reconstituted)
+	datatypes(reconstituted) <- datatypes(dataset)
+	reconstituted
+}
