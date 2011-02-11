@@ -1,5 +1,5 @@
 percent.correct <- function(dataset, predictions, target, n) {
-	if (class(pr.diameter.1)[1] == "veritable.predictions") df <- predictions@data else df <- predictions[[1]]@data
+	if (class(predictions) == "veritable.predictions") df <- predictions@data else df <- predictions[[1]]@data
 	# handling batched results
 	if (length(predictions) > 1)
 		for (i in 2:length(predictions))
