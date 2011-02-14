@@ -9,15 +9,15 @@
 # values, type = "mpv.scatter" for scatterplots of mean predicted values against
 # true values, and type = "hist" for histograms of predicted values.
 #
-# These functions require the libraries lattice and reshape, which you can
+# Predicted histograms require the libraries lattice and reshape, which you can
 # install from the R command line by running: install.packages(c("lattice",
 # "reshape"))
 #
-# To do: allow aggregation by a separate column
+# For the predicted histogram, it is presently possible to aggregate predicted
+# values by a column of names of length (n * length(entities(dataset))), by
+# passing it to the by parameter of plot.predictions.
 
-plot.predictions <- function(dataset, predictions, target, n, type = NULL, ...) {
-	library(lattice)
-	library(reshape)
+plot.predictions <- function(dataset, predictions, target, n, type = NULL, by = NULL, ...) {
 	if (is.null(type)) {
 		if (datatypes(dataset)[target] == "binary") {
 			type <- "ROC"
@@ -33,86 +33,60 @@ plot.predictions <- function(dataset, predictions, target, n, type = NULL, ...) 
 	} else if (type == "mpv.scatter") {
 		mean.scatterplot(dataset, predictions, target, n, ...)
 	} else if (type == "hist") {
-		benchmark.hist(dataset, predictions, target, n, ...)
+		predicted.hist(dataset, predictions, target, n, by, ...)
 	}
 }
 
-predicted.scatterplot <- function(dataset, predictions, target, n, rgb = "000000", alpha = "33", ...) {
+predicted.scatterplot <- function(dataset, predictions, target, n, rgb = "000000", alpha = "33", col = NULL, xlab = "True Values", ylab = "Predicted Values", pch = 3, ...) {
 	true.values <- get.true.values(dataset, target)
 	predicted.values <- get.predicted.values(predictions, target)
+	
+	if (col = NULL) {
+		col <- paste(rgb, alpha, sep = "")
+	}
+	
+	plot(predicted.values ~ rep(true.values, each = n), col = col, xlab = xlab, ylab = ylab, pch = pch, ...)
 }
 
-mean.scatterplot <- function (results, dataset, target, n, pch = 3, col = "#00000022", xlab = "True Values", ylab = "Predicted Values", ...) {
+mean.scatterplot <- function (predictions, dataset, target, n, pch = 3, col = "#00000022", xlab = "True Values", ylab = "Predicted Values", ...) {
 	
 	true.values <- get.true.values(dataset, target)
-	mean.predicted.values <- get.mean.predicted.values(results, dataset, target, n)
+	mean.predicted.values <- get.mean.predicted.values(dataset, predictions, target, n)
 	
 	plot(mean.predicted.values ~ true.values, pch = pch, col = col, xlab = xlab, ylab = ylab, ...)
 }
 
-
-get.true.values <- function(dataset, target) {
-	dataset[,target]
-}
-
-get.predicted.values <- function(dataset, predictions, target, n,
-							 		  fixed.rows.limit = 5000,
-							 		  fixed.features.limit = 5000,
-							 		  predicted.features.limit = 5000,
-							 		  fixed.cells.limit = 1000000,
-							 		  predicted.cells.limit = 2000000) {
-	if (class(predictions) == "veritable.predictions") {
-		predictions[,target]
+predicted.hist <- function(dataset, predictions, target, n, by = NULL, ground.truth = NULL, xlab = NULL, ylab = "Relative Probability", nint = 40, col = "red", ...) {
+	library(lattice)
+	library(reshape)
+	
+	predicted.values <- get.predicted.values(dataset, predictions, target, n)
+	
+	if (is.null(by)) {
+		df <- cbind(predicted.values, entity_names = rep(entities(dataset), each = n))
+		true.values <- get.true.values(dataset, predictions, target, n)
 	} else {
-	
+		df <- cbind(predicted.values, entity_names = by)
+		true.values <- ground.truth
 	}
-}
-
-get.mean.predicted.values <- function(results, dataset, target, n,
-							 		  fixed.rows.limit = 5000,
-							 		  fixed.features.limit = 5000,
-							 		  predicted.features.limit = 5000,
-							 		  fixed.cells.limit = 1000000,
-							 		  predicted.cells.limit = 2000000) {
-		
-	rows.per.batch <- floor(fixed.cells.limit / (length(features(dataset)) - 1) / n) * n
-	num.batches <- ceiling(dim(dataset@data)[1] / rows.per.batch)
 	
-	mean.predicted.values <- vector(mode = "numeric", length = length(true.values))
-	
-	for (i in 1:length(true.values)) {
-		j <- ((i - 1) * n) +1
-		k <- i * n
-		
-		start.batch <- ((j - 1) %/% rows.per.batch) + 1
-		end.batch <- ((k - 1) %/% rows.per.batch) + 1
-		
-		p <- ((j - 1) %% rows.per.batch) + 1
-		q <- ((k - 1) %% rows.per.batch) + 1
-		
-		#print(paste(i, j, k, start.batch, end.batch, p, q, "\n"))
-		if (start.batch == end.batch) {
-			mean.predicted.values[i] <- mean(results[[start.batch]][p:q, target])
-		} else {
-			mean.predicted.values[i] <- mean(c(results[[start.batch]][p:rows.per.batch, target], results[[end.batch]][1:q, target]))
-		}
-	}
-	mean.predicted.values
-}
+	hist.df = melt(df[,2:length(names(df))], id="entity_names")
 
-plot_benchmark <- function(analysis.handle, dataset, target, num.predictions, entities, predictions.df) {
-    df = cbind(predictions.df, entity_names = row.names(predictions.df))
-    histdf = melt(df[,2:length(names(df))], id="entity_names")
-
-    print(histogram(~ value | entity_names,
-              data = histdf, 
-              xlab = paste("Predicted ", target),
-              ylab = "Relative Probability",
-	      nint = 40,
-              panel = function(...) {
-                          panel.histogram(...)
-			  panel.abline(v = predictions.df[panel.number(), target], col="red")
-              }))
+	if (is.null(xlab)) {
+		xlab <- paste("Predicted", target)
+    }
+    grid::grid.prompt(TRUE)
+	print(hist.plot <- histogram(~ value | entity_names,
+						   data = hist.df,
+						   xlab = xlab,
+						   ylab = ylab,
+						   nint = nint,
+						   panel = function(...) {
+						   		panel.histogram(...)
+						   		panel.abline(v = true.values[panel.number()], col = col)
+						   },
+						   layout = c(3,4)))
+	grid::grid.prompt(FALSE)
 }
 
 # ROC plotting functions.
@@ -152,4 +126,74 @@ plot.roc <- function(correct, parameters = (0:100)/100, show.reference = TRUE, m
 	if (show.reference == TRUE) {
 		lines(c(0,1), c(0,1), type = "l", lty = 3) # random guesses
 	}
+}
+
+# Utility functions for scatterplots
+get.true.values <- function(dataset, target) {
+	dataset[,target]
+}
+
+get.predicted.values <- function(dataset, predictions, target, n,
+							 		  fixed.rows.limit = 5000,
+							 		  fixed.features.limit = 5000,
+							 		  predicted.features.limit = 5000,
+							 		  fixed.cells.limit = 1000000,
+							 		  predicted.cells.limit = 2000000) {
+	if (class(predictions) == "veritable.predictions") {
+		predictions[,target]
+	} else if (length(predictions) == 1) {
+		predictions[[1]][,target]
+	} else {
+		rows.per.batch <- floor(fixed.cells.limit / (length(features(dataset)) - 1) / n) * n
+		num.batches <- ceiling(dim(dataset@data)[1] / rows.per.batch)
+		
+		if (datatypes(dataset)[target]$type == "binary") {
+			predicted.values <- vector(mode = "logical", length = ((rows.per.batch * (num.batches - 1)) + dim(predictions[[num.batches]])[1]))
+		} else if (datatypes(dataset)[target]$type %in% c("continuous", "ordinal")) {
+			predicted.values <- vector(mode = "numeric", length = ((rows.per.batch * (num.batches - 1)) + dim(predictions[[num.batches]])[1]))
+		} else {
+			predicted.values <- vector(mode = "character", length = ((rows.per.batch * (num.batches - 1)) + dim(predictions[[num.batches]])[1]))
+		}
+		for (i in 1:(num.batches - 1)) {
+			j <- (((i - 1) * rows.per.batch) + 1)
+			k <- (i * rows.per.batch)
+			predicted.values[j:k] <- predictions[[i]][,target]
+		}
+		j <- (((num.batches - 1) * rows.per.batch) + 1)
+		k <- (((num.batches - 1) * rows.per.batch) + dim(predictions[[num.batches]])[1])
+		predicted.values[j:k] <- predictions(num.batches)[,target]
+	}
+	predicted.values
+}
+
+get.mean.predicted.values <- function(dataset, predictions, target, n,
+							 		  fixed.rows.limit = 5000,
+							 		  fixed.features.limit = 5000,
+							 		  predicted.features.limit = 5000,
+							 		  fixed.cells.limit = 1000000,
+							 		  predicted.cells.limit = 2000000) {
+		
+	rows.per.batch <- floor(fixed.cells.limit / (length(features(dataset)) - 1) / n) * n
+	num.batches <- ceiling(dim(dataset@data)[1] / rows.per.batch)
+	
+	mean.predicted.values <- vector(mode = "numeric", length = length(true.values))
+	
+	for (i in 1:length(true.values)) {
+		j <- ((i - 1) * n) + 1
+		k <- i * n
+		
+		start.batch <- ((j - 1) %/% rows.per.batch) + 1
+		end.batch <- ((k - 1) %/% rows.per.batch) + 1
+		
+		p <- ((j - 1) %% rows.per.batch) + 1
+		q <- ((k - 1) %% rows.per.batch) + 1
+		
+		#print(paste(i, j, k, start.batch, end.batch, p, q, "\n"))
+		if (start.batch == end.batch) {
+			mean.predicted.values[i] <- mean(results[[start.batch]][p:q, target])
+		} else {
+			mean.predicted.values[i] <- mean(c(results[[start.batch]][p:rows.per.batch, target], results[[end.batch]][1:q, target]))
+		}
+	}
+	mean.predicted.values
 }
