@@ -34,7 +34,7 @@ plot.predictions <- function(dataset, predictions, target, n, type = NULL, by = 
 		mean.scatterplot(dataset, predictions, target, n, ...)
 	} else if (type == "hist") {
 		predicted.hist(dataset, predictions, target, n, by, ...)
-	}
+	} else stop(paste("Didn't recognize plot type,", type))
 }
 
 predicted.scatterplot <- function(dataset, predictions, target, n, rgb = "000000", alpha = "33", col = NULL, xlab = "True Values", ylab = "Predicted Values", pch = 3, ...) {
