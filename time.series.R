@@ -38,17 +38,23 @@
 #
 # windowize.df converts a data frame of time series into windowized form. If the
 # vector n is of length 1, it will use the same lags for each time series;
-# otherwise, it will recycle the vector.
+# otherwise, it will recycle the vector. A column in the original data frame 
+# named "mydata" will be transformed into n columns of the windowized data
+# frame named "mydata_lag0"... "mydata_lagn". 
 #
 # roll.forward runs predictions on a windowized time series dataset in order 
-# to forward simulate the evolution of the time series. This function allows
-# joint predictions on the basis of any number of lags and expects a vector pf
-# of column names of the predicted variables, a vector pf.lags of the lags to
-# take into account for each predicted variable, n, the number of predicted
-# evolutions to return, t, the number of periods to roll predictions
-# forward for each evolution, and r, the name or number of the row of the 
-# dataset on which to base predictions. A vector ff of fixed variables and
-# ff.lags may also be specified. 
+# to forward simulate the evolution of the time series. This function expects
+# column names in the "name_lag2" format. It supports joint predictions on the
+# basis of any number of lags of the predicted or fixed variables, and expects 
+# the variable names and lags to be specified separately. Specifically, it
+# expects a character vector pf of predicted variable names, a vector pf.lags
+# of the number of lags to take into account for each predicted variable, as 
+# well as the arguments n, the number of predicted joint evolutions to return,
+# t, the number of periods to roll predictions forward for each evolution, and 
+# r, the name or number of the row of the dataset on which to base predictions, 
+# in addition to the handle of the analysis on which to base predictions and the 
+# original dataset. The parameter timeout may optionally be specified to control # the length of time to wait for predictions before erroring (default is 3600 
+# seconds).
 
 as.return.series <- function(ts) {
 	convert.ts(ts, function(ts, last) {(ts - last)/last})
@@ -171,7 +177,7 @@ windowize.ts <- function(ts, n, name = NULL) {
 		wiz
 	} else {
 		wiz <- data.frame(ts)
-		names(wiz) <- name
+		names(wiz) <- paste(name, "_lag0")
 		wiz
 	}
 }
@@ -187,7 +193,7 @@ windowize.df <- function(df, n) {
 	wf
 }
 
-roll.forward <- function(handle, dataset, pf, pf.lags, ff, ff.lags, n, t, r,
+roll.forward <- function(handle, dataset, pf, pf.lags, n, t, r,
 						 timeout = 3600,
 						 fixed.rows.limit = 5000,
 						 fixed.features.limit = 5000,
@@ -196,48 +202,45 @@ roll.forward <- function(handle, dataset, pf, pf.lags, ff, ff.lags, n, t, r,
 						 predicted.cells.limit = 2000000) {
 
 	pf.lags <- rep(pf.lags, length.out = length(pf))
-	ff.lags <- rep(ff.lags, length.out = length(pf))
 	
 	get.predicted <- function(dataset, pf) {
 		predicted <- c()
 		for (i in pf) {
-			if (i %in% features(dataset)) {
-				predicted <- c(predicted, i)
-			} else if (paste(i, "_lag0", sep = "") %in% pf) {
+			if (paste(i, "_lag0", sep = "") %in% features(dataset)) {
 				predicted <- c(predicted, paste(i, "_lag0", sep = ""))
-			} else stop(paste("Couldn't find predicted feature," i))
+			} else stop(paste("Couldn't find predicted feature", i))
 		}
 		predicted
 	}
 	
 	get.fixed <- function(dataset, pf, pf.lags, ff, ff.lags) {
-		if (pf.lags[1] > 0) {
-			for (i in 1:pf.lags[1]) {
-				fixed <- cbind(fixed, dataset[r, paste(pf[1], "_lag", i, sep = "")])
-			}
-		}
-		
-		if (length(pf) > 1) {
-			for (i in 2:length(pf)) {
-				if (pf.lags[i] > 0) {
-					for (j in 1:pf.lags[i]) {
-						fixed <- cbind(fixed, dataset[r, paste(pf[i], "_lag", j, sep = "")])
-					}
+		fixed <- c()
+		for (i in seq_along(pf)) {
+			if (pf.lags[i] > 0) {
+				for (j in 1:pf.lags[i]) {
+					fixed <- c(fixed, paste(pf[i], "_lag", j, sep = ""))
 				}
 			}
 		}
-		
-		for (i in seq_along(ff)) {
-			fixed <- cbind(fixed, dataset[r, ff[i]])
-			if (ff.lags[i]) > 0 {
-				for (j in 1:ff.lags[i]) {
-					fixed <- cbind(fixed, dataset[r, paste(ff[i], "_lag", j, sep = "")])
-				}
-			}
-		}
+		fixed <- dataset[r, fixed]
 		fixed
 	}
 	
+	shift.back <- function(dataset, pf, pf.lags, ff, ff.lags) {
+		df <- dataset@data
+		for (i in seq_along(pf)) {
+			if (pf.lags[i] > 0) {
+				for (j in pf.lags[i]:1) {
+					df[, paste(pf[i], "_lag", j, sep = "")] <- df[, paste(pf[i], "_lag", j - 1, sep = "")]
+				}
+			} 
+			df[,paste(pf[i], "_lag", 0, sep = "")] <- NA
+		}
+		shift <- as.veritable.dataset(df)
+		datatypes(shift) <- datatypes(dataset)
+		shift
+	}
+
 	predicted <- get.predicted(dataset, pf)
 	fixed <- get.fixed(dataset, pf, pf.lags, ff, ff.lags)
 	
@@ -251,9 +254,10 @@ roll.forward <- function(handle, dataset, pf, pf.lags, ff, ff.lags, n, t, r,
 	for (i in predicted) {
 		result.series[[i]] <- list()
 		for (j in 1:n)
-		c(results[[1]][,])
+		result.series[[i]][[j]] <- c(results[[1]][j,i])
 	}
 
 	for (i in 2:t) {
+		handles[[1]] <- start.predictions(handle, dataset, n, fixed, predicted)
 	}
 }
