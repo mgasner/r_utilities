@@ -22,37 +22,55 @@
 # convert from log returns, and type = "diff" to convert from raw differences;
 # by default, type = "return".
 #
-# convert.ts.df converts the time series contained in selected columns of a
-# between representations. By default, convert.ts.df will change all of the
+# convert.ts.df converts the time series contained in selected columns of a data
+# frame between representations. By default, convert.ts.df will change all the
 # columns of its argument from raw series to return series. Set the arguments
 # raw.to.return, raw.to.log, raw.to.diff, return.to.raw, log.to.raw, and
 # diff.to.raw to specify which columns to convert. The first three of these
 # arguments expect a vector of column names or indices; the second three expect
 # a two-column data.frame, the first column of which is a vector of column names
 # or indices, and the second column of which is a vector of initial values.
+#
+# windowize.ts converts a time series vector to an (n + 1)-column data frame,
+# where column m represents the (n + 1 - m) lag of the time series, padded with
+# NA values. Setting the name parameter will create appropriate column names for
+# the resulting data frame.
+#
+# windowize.df converts a data frame of time series into windowized form. If the
+# vector n is of length 1, it will use the same lags for each time series;
+# otherwise, it will recycle the vector.
+#
+# roll.forward runs predictions on a windowized time series dataset in order 
+# to forward simulate the evolution of the time series. This function allows
+# joint predictions on the basis of any number of lags and expects a vector pf
+# of column names of the predicted variables, a vector pf.lags of the lags to
+# take into account for each predicted variable, n, the number of predicted
+# evolutions to return, t, the number of periods to roll predictions
+# forward for each evolution, and r, the name or number of the row of the 
+# dataset on which to base predictions. A vector ff of fixed variables and
+# ff.lags may also be specified. Note that this function depends on the
+# utilities in batch.predictions.R
 
 as.return.series <- function(ts) {
-	convert.ts(ts, function(ts, last) {(ts[i] - last)/last})
+	convert.ts(ts, function(ts, last) {(ts - last)/last})
 }
 
-as.log.ratio.series <- function(ts) {
-	convert.ts(ts, function(ts, last) {log(ts[i]/last)})
+as.log.return.series <- function(ts) {
+	convert.ts(ts, function(ts, last) {log(ts/last)})
 }
 
 as.diff.series <- function(ts) {
-	convert.ts(ts, function(ts, last) {ts[i] - last})
+	convert.ts(ts, function(ts, last) {ts - last})
 }
 
-as.raw.series <- function(ts, start) {
-	convert.ts(ts, function(ts, last) {ts[i] - last}, start)
-
-	rs <- vector(mode = "numeric", length = length(ts))
-	rs[1] <- start
-	for (i in seq_along(ts)) {
-		if (i > 1) {
-		
-		}
-	}
+as.raw.series <- function(ts, start, type = "return") {
+	if (type == "log") {
+		convert.ts(ts, function(ts, last) {exp(ts + log(last))}, start)
+	} else if (type == "diff") {
+		convert.ts(ts, function(ts, last) {ts + last}, start)
+	} else if (type == "return") {
+		convert.ts(ts, function(ts, last) {last * ts + last}, start)
+	} else stop(paste("Didn't recognize type", type))
 }
 
 convert.ts <- function(ts, fun, start = NULL) {
@@ -63,14 +81,37 @@ convert.ts <- function(ts, fun, start = NULL) {
 			if (! is.na(ts[i])) {
 				if (is.na(last)) {
 					rs[i] <- NA
-					last <- rs[i]
 				} else {
 					rs[i] <- fun(ts[i], last)
-					last <- ts[i]
-				}
+				}		
+				last <- ts[i]
+			} else {
+				rs[i] <- NA
 			}
 		}
 	} else {
+		for(i in seq_along(ts)) {
+			if (is.na(last)) {
+				if (! is.na(ts[i])) {
+					rs[i] <- fun(ts[i], start)
+					last <- rs[i]
+				} else {
+					if (! is.na(ts[i+1])) {
+						rs[i] <- start
+						last <- start
+					} else {
+						rs[i] <- NA
+					}
+				}
+			} else {
+				if (! is.na(ts[i])) {
+					rs[i] <- fun(ts[i], last)
+					last <- rs[i]
+				} else {
+					rs[i] <- NA
+				}
+			}
+		}
 	}
 	rs
 }
@@ -82,25 +123,128 @@ convert.ts.df <- function(df,
 					      return.to.raw = NULL,
 					      log.to.raw = NULL,
 						  diff.to.raw = NULL) {
-	if (is.null(raw.to.return) && is.null(raw.to.return) &&
-	    is.null(raw.to.return) && is.null(raw.to.return) &&
-	    is.null(raw.to.return) && is.null(raw.to.return)) {
+	if (is.null(raw.to.return) && is.null(raw.to.log) &&
+	    is.null(raw.to.diff) && is.null(return.to.raw) &&
+	    is.null(log.to.raw) && is.null(diff.to.raw)) {
 		for (i in seq_along(names(df))) {
 			df[,i] <- as.return.series(df[,i])
 		}
 	} else {
-		for (i in seq_along(raw.to.return) {
+		for (i in seq_along(raw.to.return)) {
+			df[,i] <- as.return.series(df[,i])
 		}
-		for (i in seq_along(raw.to.return) {
+		for (i in seq_along(raw.to.log)) {
+			df[,i] <- as.log.return.series(df[,i])
 		}
-		for (i in seq_along(raw.to.return) {
+		for (i in seq_along(raw.to.diff)) {
+			df[,i] <- as.diff.series(df[,i])
 		}
-		for (i in seq_along(raw.to.return) {
+		if (! is.null(return.to.raw)) for (i in 1:dim(return.to.raw)[1]) {
+			df[, return.to.raw[i,1]] <- as.raw.series(df[, return.to.raw[i,1]], return.to.raw[i,2])
 		}
-		for (i in seq_along(raw.to.return) {
+		if (! is.null(log.to.raw)) for (i in 1:dim(log.to.raw)[1]) {
+			df[, log.to.raw[i,1]] <- as.raw.series(df[, log.to.raw[i,1]], log.to.raw[i,2], type = "log")
 		}
-		for (i in seq_along(raw.to.return) {
+		if (! is.null(diff.to.raw)) for (i in 1:dim(diff.to.raw)[1]) {
+			df[, diff.to.raw[i,1]] <- as.raw.series(df[, diff.to.raw[i,1]], diff.to.raw[i,2], type = "diff")
 		}
 	}
 	df
+}
+
+windowize.ts <- function(ts, n, name = NULL) {
+	if (n > 0) {
+		ts.pad <- c(rep(NA, n), ts, rep(NA, n))
+		wiz <- matrix(nrow = length(ts), ncol = (n + 1))
+		colnames <- vector(mode = "character", length = (n + 1))
+	
+		i <- seq_along(ts)
+		j <- i + n
+		
+		for (k in 1:(n+1))
+			wiz[i,k] <- ts.pad[j + k - n - 1]
+		
+		wiz <- as.data.frame(wiz)
+	
+		l <- n:0
+		colnames <- paste(name, "_lag", l, sep = "")
+		names(wiz) <- colnames
+		wiz
+	} else {
+		wiz <- data.frame(ts)
+		names(wiz) <- name
+		wiz
+	}
+}
+
+windowize.df <- function(df, n) {
+	n <- rep(n, length.out = dim(df)[2])
+	wf <- windowize.ts(df[,1], n[1], names(df)[1])
+	if (dim(df)[2] > 1) {
+		for (i in 2:dim(df)[2]) {
+			wf <- cbind(wf, windowize.ts(df[,i], n[i], names(df)[i]))
+		}
+	}
+	wf
+}
+
+roll.forward <- function(handle, dataset, pf, pf.lags, ff, ff.lags, n, t, r,
+						 timeout = 3600) {
+
+	pf.lags <- rep(pf.lags, length.out = length(pf))
+	ff.lags <- rep(ff.lags, length.out = length(pf))
+	
+	get.predicted <- function(dataset, pf, pf.lags) {
+		predicted <- c()
+		for (i in pf) {
+			if (i %in% features(dataset)) {
+				predicted <- c(predicted, i)
+			} else if (paste(i, "_lag0", sep = "") %in% pf) {
+				predicted <- c(predicted, paste(i, "_lag0", sep = ""))
+			} else stop(paste("Couldn't find predicted feature," i))
+		}
+		predicted
+	}
+	
+	get.fixed <- function(dataset, pf, pf.lags, ff, ff.lags) {
+		if (pf[1] %in% features(dataset)) {
+			fixed <- data.frame(dataset[r, pf[1]])
+		} else if (paste(pf[1], "_lag0", sep = "") %in% features(dataset)) {
+			fixed <- data.frame(dataset[r, paste(pf[1], "_lag0", sep = "")])
+		} else stop(paste("Couldn't find predicted feature," i))
+		if (pf.lags[1] > 0) {
+			for (i in 1:pf.lags[1]) {
+				fixed <- cbind(fixed, dataset[r, paste(pf[1], "_lag", i, sep = "")])
+			}
+		}
+		
+		if (length(pf) > 1) {
+			for (i in 2:length(pf)) {
+				if (pf[i] %in% features(dataset)) {
+					fixed <- cbind(fixed, dataset[r, pf[i]])
+				} else if (paste(pf[1], "_lag0", sep = "") %in% features(dataset)) {
+					fixed <- cbind(fixed, dataset[r, paste(pf[i], "_lag0", sep = "")])
+				}
+				if (pf.lags[1] > 0) {
+					for (j in 1:pf.lags[1]) {
+						fixed <- cbind(fixed, dataset[r, paste(pf[i], "_lag", j, sep = "")])
+					}
+				}
+			}
+		}
+		
+		for (i in seq_along(ff)) {
+			fixed <- cbind(fixed, dataset[r, ff[i]])
+			if (ff.lags[i]) > 0 {
+				for (j in 1:pf.lags[i]) {
+					fixed <- cbind(fixed, dataset[r, paste(ff[i], "_lag", j, sep = "")])
+				}
+			}
+		}
+		fixed
+	}
+	
+	
+	for (i in 1:t) {
+	}
 }
