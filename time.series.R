@@ -48,8 +48,7 @@
 # evolutions to return, t, the number of periods to roll predictions
 # forward for each evolution, and r, the name or number of the row of the 
 # dataset on which to base predictions. A vector ff of fixed variables and
-# ff.lags may also be specified. Note that this function depends on the
-# utilities in batch.predictions.R
+# ff.lags may also be specified. 
 
 as.return.series <- function(ts) {
 	convert.ts(ts, function(ts, last) {(ts - last)/last})
@@ -189,12 +188,17 @@ windowize.df <- function(df, n) {
 }
 
 roll.forward <- function(handle, dataset, pf, pf.lags, ff, ff.lags, n, t, r,
-						 timeout = 3600) {
+						 timeout = 3600,
+						 fixed.rows.limit = 5000,
+						 fixed.features.limit = 5000,
+						 predicted.features.limit = 5000,
+						 fixed.cells.limit = 1000000,
+						 predicted.cells.limit = 2000000) {
 
 	pf.lags <- rep(pf.lags, length.out = length(pf))
 	ff.lags <- rep(ff.lags, length.out = length(pf))
 	
-	get.predicted <- function(dataset, pf, pf.lags) {
+	get.predicted <- function(dataset, pf) {
 		predicted <- c()
 		for (i in pf) {
 			if (i %in% features(dataset)) {
@@ -207,11 +211,6 @@ roll.forward <- function(handle, dataset, pf, pf.lags, ff, ff.lags, n, t, r,
 	}
 	
 	get.fixed <- function(dataset, pf, pf.lags, ff, ff.lags) {
-		if (pf[1] %in% features(dataset)) {
-			fixed <- data.frame(dataset[r, pf[1]])
-		} else if (paste(pf[1], "_lag0", sep = "") %in% features(dataset)) {
-			fixed <- data.frame(dataset[r, paste(pf[1], "_lag0", sep = "")])
-		} else stop(paste("Couldn't find predicted feature," i))
 		if (pf.lags[1] > 0) {
 			for (i in 1:pf.lags[1]) {
 				fixed <- cbind(fixed, dataset[r, paste(pf[1], "_lag", i, sep = "")])
@@ -220,13 +219,8 @@ roll.forward <- function(handle, dataset, pf, pf.lags, ff, ff.lags, n, t, r,
 		
 		if (length(pf) > 1) {
 			for (i in 2:length(pf)) {
-				if (pf[i] %in% features(dataset)) {
-					fixed <- cbind(fixed, dataset[r, pf[i]])
-				} else if (paste(pf[1], "_lag0", sep = "") %in% features(dataset)) {
-					fixed <- cbind(fixed, dataset[r, paste(pf[i], "_lag0", sep = "")])
-				}
-				if (pf.lags[1] > 0) {
-					for (j in 1:pf.lags[1]) {
+				if (pf.lags[i] > 0) {
+					for (j in 1:pf.lags[i]) {
 						fixed <- cbind(fixed, dataset[r, paste(pf[i], "_lag", j, sep = "")])
 					}
 				}
@@ -236,7 +230,7 @@ roll.forward <- function(handle, dataset, pf, pf.lags, ff, ff.lags, n, t, r,
 		for (i in seq_along(ff)) {
 			fixed <- cbind(fixed, dataset[r, ff[i]])
 			if (ff.lags[i]) > 0 {
-				for (j in 1:pf.lags[i]) {
+				for (j in 1:ff.lags[i]) {
 					fixed <- cbind(fixed, dataset[r, paste(ff[i], "_lag", j, sep = "")])
 				}
 			}
@@ -244,7 +238,22 @@ roll.forward <- function(handle, dataset, pf, pf.lags, ff, ff.lags, n, t, r,
 		fixed
 	}
 	
+	predicted <- get.predicted(dataset, pf)
+	fixed <- get.fixed(dataset, pf, pf.lags, ff, ff.lags)
 	
-	for (i in 1:t) {
+	# right now this doesn't work to predict off of NA values
+	handles <- list()
+	results <- list()
+	result.series <- list()
+	
+	handles[[1]] <- start.predictions(handle, dataset, n, fixed, predicted)
+	results[[1]] <- wait.for.predictions(handles[[1]], dataset, timeout)
+	for (i in predicted) {
+		result.series[[i]] <- list()
+		for (j in 1:n)
+		c(results[[1]][,])
+	}
+
+	for (i in 2:t) {
 	}
 }
