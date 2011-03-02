@@ -222,7 +222,6 @@ roll.forward <- function(handle, dataset, pf, pf.lags, n, t, r,
 				}
 			}
 		}
-		fixed <- dataset[r, fixed]
 		fixed
 	}
 	
@@ -244,20 +243,30 @@ roll.forward <- function(handle, dataset, pf, pf.lags, n, t, r,
 	predicted <- get.predicted(dataset, pf)
 	fixed <- get.fixed(dataset, pf, pf.lags, ff, ff.lags)
 	
-	# right now this doesn't work to predict off of NA values
+	# right now this doesn't work for rows with NA values
 	handles <- list()
 	results <- list()
 	result.series <- list()
 	
-	handles[[1]] <- start.predictions(handle, dataset, n, fixed, predicted)
+	handles[[1]] <- start.predictions(handle, dataset, n, fixed.features = dataset@data[r,fixed], predicted.features = predicted)
 	results[[1]] <- wait.for.predictions(handles[[1]], dataset, timeout)
 	for (i in predicted) {
 		result.series[[i]] <- list()
-		for (j in 1:n)
-		result.series[[i]][[j]] <- c(results[[1]][j,i])
+		for (j in 1:n) {
+			result.series[[i]][[j]] <- c(results[[1]][j,i])
+		}
 	}
 
 	for (i in 2:t) {
-		handles[[1]] <- start.predictions(handle, dataset, n, fixed, predicted)
+		shift <- shift.back(results[[i - 1]])
+		handles[[i]] <- start.predictions(handle, dataset, n, fixed.features = shift@data[,fixed], predicted.features = predicted)
+		results[[i]] <- wait.for.predictions(handles[[i]], dataset, timeout)
+		for (j in predicted) {
+			result.series[[i]] <- list()
+			for (k in 1:n) {
+				result.series[[j]][[k]] <- c(results[[i]][k,j])
+			}
+		}
 	}
+	result.series
 }
