@@ -153,7 +153,7 @@ make.iterations <- function(dataset, n, name, by = 1, kernel.control = FALSE, ex
 	else {
 		handles <- list()
 		if (is.null(extends)) {
-			handles[[1]] <- start.analysis(dataset, username = USER, server = SERVER, description = paste(name, "iteration 1"), samples = 1, iterations = 1, ...)
+			handles[[1]] <- start.analysis(dataset, description = paste(name, "iteration 1"), samples = 1, iterations = 1, ...)
 		}
 		else {
 			handles[[1]] <- resume(extends, description = paste(name, "iteration 1"), iterations = by, ...)
@@ -214,21 +214,21 @@ make.kernel.iterations <- function(dataset, n, name, extends = NULL, ...) {
 		}
 		
 		i <- i + 1
-		hyper.kernel(handles[[i]], name, i)
+		handles[[i]] <- hyper.kernel(handles[[i - 1]], name, i)
 		
 		for (j in 1:length(features(dataset))) {
 			i <- i + 1
 			while(status(handles[[i - 1]]) != "finished") {
 				Sys.sleep(0.1)
 			}		
-			handles[[i]] <- kind.kernel(dataset, features(dataset)[j], name, i, extends = handles[[i - 1]])
+			handles[[i]] <- kind.kernel(handles[[i - 1]], features(dataset)[j], name, i)
 		}
 	}
 	list("kernel_control", dataset, handles)
 }
 
 category.kernel <- function(dataset, entity, name, i, extends = NULL) {	
-	if (is.null(extends)) start.analysis(dataset, username = USER, server = SERVER, samples = 1, iterations = 1, description = paste(name, "iteration", i), kernel.config =
+	if (is.null(extends)) start.analysis(dataset, samples = 1, iterations = 1, description = paste(name, "iteration", i), kernel.config =
 				   veritable.r:::jsondict(
 						class = "cycle",
 						cycle = veritable.r:::jsonlist(
@@ -246,7 +246,7 @@ category.kernel <- function(dataset, entity, name, i, extends = NULL) {
 						)
 					)
 	)				
-	else resume(extends, username = USER, server = SERVER, samples = 1, iterations = 1, description = paste(name, "iteration", i), kernel.config =
+	else resume(extends, samples = 1, iterations = 1, description = paste(name, "iteration", i), kernel.config =
 				veritable.r:::jsondict(
 					class = "cycle",
 					cycle = veritable.r:::jsonlist(
@@ -267,7 +267,7 @@ category.kernel <- function(dataset, entity, name, i, extends = NULL) {
 }
 
 hyper.kernel <- function(extends, name, i) {
-	resume(extends, username = USER, server = SERVER, description = paste(name, "iteration", i), samples = 1, iterations = 1, kernel.config =
+	resume(extends, description = paste(name, "iteration", i), samples = 1, iterations = 1, kernel.config =
 			veritable.r:::jsondict(
 				class = "cycle",
 				cycle = veritable.r:::jsonlist(
@@ -286,7 +286,7 @@ hyper.kernel <- function(extends, name, i) {
 }
 
 kind.kernel <- function(extends, feature, name, i) {
-	resume(extends, username = USER, server = SERVER, description = paste(name, "iteration", i), samples = 1, iterations = 1, kernel.config =
+	resume(extends, description = paste(name, "iteration", i), samples = 1, iterations = 1, kernel.config =
 		   veritable.r:::jsondict(
 				class = "cycle",
 				cycle = veritable.r:::jsonlist(
