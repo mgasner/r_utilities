@@ -41,7 +41,7 @@ predicted.scatterplot <- function(dataset, predictions, target, n, rgb = "000000
 	true.values <- get.true.values(dataset, target)
 	predicted.values <- get.predicted.values(predictions, target)
 	
-	if (col = NULL) {
+	if (col == NULL) {
 		col <- paste(rgb, alpha, sep = "")
 	}
 	
@@ -107,7 +107,7 @@ percent.correct <- function(dataset, predictions, target, n) {
 	
 	for (i in 1:numrows) {
 		range <- (((i - 1) * n) + 1):(i * n)
-		correct[i] <- sum(as.numeric(df[range, target] == dataset[i, target]))
+		correct[i] <- sum(as.numeric(df[range, target] == as.numeric(as.data.frame(dataset[i, target]))))
 		correct[i] <- (correct[i] / n)
 	}
 	
