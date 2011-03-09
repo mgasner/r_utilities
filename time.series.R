@@ -270,3 +270,29 @@ roll.forward <- function(handle, dataset, pf, pf.lags, n, t, r,
 	}
 	result.series
 }
+
+plot.roll.forward <- function(dates, result.series, observed.series = NULL, to.plot = 1, transparency = "33", ...) {
+	series <- list()
+	if (! is.null(observed.series)) {
+		series[[1]] <- observed.series
+		for (i in 2:(length(result.series[[to.plot]]) + 1)) {
+			series[[i]] <- result.series[[to.plot]][[i - 1]]
+		}
+	} else {
+		for (i in seq_along(result.series)) {
+			series[[i]] <- result.series[[to.plot]][[i]]
+		}
+	}
+	
+	plot(dates, rep(NA, length(dates)), ylim = calculate.range(series), ...)
+	if (! is.null(observed.series)) {
+		lines(dates[1:length(observed.series)], observed.series)
+		for (i in seq_along(result.series[[to.plot]])) {
+			lines(dates[(length(observed.series) + 1):(length(observed.series) + length(result.series[[to.plot]][[i]]))], result.series[[to.plot]][[i]], col = "#00000001")
+		}
+	} else {
+		for (i in seq_along(result.series[[to.plot]])) {
+			lines(dates[1:length(result.series[[to.plot]][[i]])], result.series[[to.plot]][[i]], col = "#00000001")
+		}
+	}
+}
