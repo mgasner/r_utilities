@@ -1,27 +1,12 @@
-# February 26, 2011
+# March 17, 2011
 # Max Gasner <max@naviasystems.com>
 #
 # R utilities to convert between time series representations and to shape tables
 # appropriately for time series analysis with Veritable.
 #
-# as.return.series converts a time series vector from the form (..., p_{t-1},
-# p_t, ...) to the form (..., (p_{t-1} - p_{t-2})/p_{t-2}, (p_t -
-# p_{t-1})/p_{t-1}, ...). This function drops the first datapoint. If NA values
-# appear in the series, it will calculate the return of each datapoint based on
-# the last observed value.
-#
-# as.log.return.series converts a time series vector to the form (...,
-# ln{p_{t-1}/p_{t-2}}, ln{p_t/p_{t-1}}, ...). Thus function drops the first
-# datapoint and handles NAs like as.return.series
-#
-# as.diff.series converts a time series vector to the form (..., p_{t-1} -
-# p_{t-2}, p_t - p_{t-1}, ...)
-#
-# as.raw.series reconverts a time series from any of these forms to the original
-# series. The start argument determines the initial value. Set type = "log" to
-# convert from log returns, and type = "diff" to convert from raw differences;
-# by default, type = "return".
-#
+################################################################################
+# Conversion Utilities
+# 
 # convert.ts.df converts the time series contained in selected columns of a data
 # frame between representations. By default, convert.ts.df will change all the
 # columns of its argument from raw series to return series. Set the arguments
@@ -31,16 +16,44 @@
 # a two-column data.frame, the first column of which is a vector of column names
 # or indices, and the second column of which is a vector of initial values.
 #
+# windowize.df converts a data frame of time series vectors into windowized
+# form. If the vector n is of length 1, it will use the same lags for each time 
+# series; otherwise, it will recycle the vector. A column in the original data
+# frame named "mydata" will be transformed into n columns of the windowized
+# data frame named "mydata_lag0"... "mydata_lagn". Alternatively, windows may
+# be mixed with single lags by specifying n as a list of vectors. For instance,
+# if n = list(5, c(1:2, 5), NA), then the resulting data frame will contain the
+# columns col1_lag0, col1_lag5, col2_lag5, col2_lag2, col2_lag1, col3_lag0.
+#
+# make.moving average takes a time series vector and a window n and returns a 
+# vector of the form (..., (p_{t-1} + ... + p_{t-1-n})/n, (p_t + ... +
+# p_{t-n})/n, (p_{t+1} + ... + p_{t+1-n})/n, ...). This function drops the first
+# n datapoints. If NA values appear in the series, it will calculate the moving
+# average based on the last n observed values.
+#
 # windowize.ts converts a time series vector to an (n + 1)-column data frame,
 # where column m represents the (n + 1 - m) lag of the time series, padded with
 # NA values. Setting the name parameter will create appropriate column names for
 # the resulting data frame.
 #
-# windowize.df converts a data frame of time series into windowized form. If the
-# vector n is of length 1, it will use the same lags for each time series;
-# otherwise, it will recycle the vector. A column in the original data frame 
-# named "mydata" will be transformed into n columns of the windowized data
-# frame named "mydata_lag0"... "mydata_lagn". 
+# lag.ts converts a time series vector to its nth lag, padded with NA values.
+#
+# as.return.series converts a time series vector from the form (..., p_{t-1},
+# p_t, ...) to the form (..., (p_{t-1} - p_{t-2})/p_{t-2}, (p_t -
+# p_{t-1})/p_{t-1}, ...). This function drops the first datapoint. If NA values
+# appear in the series, it will calculate the return of each datapoint based on
+# the last observed value. as.log.return.series converts a time series vector to
+# the form (..., ln{p_{t-1}/p_{t-2}}, ln{p_t/p_{t-1}}, ...). as.diff.series 
+# converts a time series vector to the form (..., p_{t-1} - p_{t-2}, p_t -
+# p_{t-1}, ...)
+#
+# as.raw.series reconverts a time series from any of these forms to the original
+# series. The start argument determines the initial value. Set type = "log" to
+# convert from log returns, and type = "diff" to convert from raw differences;
+# by default, type = "return".
+#
+################################################################################
+# Predictions Utilities
 #
 # roll.forward runs predictions on a windowized time series dataset in order 
 # to forward simulate the evolution of the time series. This function expects
@@ -49,12 +62,16 @@
 # the variable names and lags to be specified separately. Specifically, it
 # expects a character vector pf of predicted variable names, a vector pf.lags
 # of the number of lags to take into account for each predicted variable, as 
-# well as the arguments n, the number of predicted joint evolutions to return,
-# t, the number of periods to roll predictions forward for each evolution, and 
-# r, the name or number of the row of the dataset on which to base predictions, 
+# well as the arguments:
+#   n  the number of predicted joint evolutions to return,
+#   t  the number of periods to roll predictions forward for each evolution, 
+#   r  the name or number of the row of the dataset on which to base
+#      predictions,
 # in addition to the handle of the analysis on which to base predictions and the 
 # original dataset. The parameter timeout may optionally be specified to control # the length of time to wait for predictions before erroring (default is 3600 
 # seconds).
+#
+# plot.roll.forward plots the results
 
 as.return.series <- function(ts) {
 	convert.ts(ts, function(ts, last) {(ts - last)/last})
@@ -121,6 +138,29 @@ convert.ts <- function(ts, fun, start = NULL) {
 	rs
 }
 
+make.moving.average <- function(ts, n) {
+  m <- c()
+  last <- c()
+  m[1:n] <- NA
+  last[1:n] <- ts[1:n]
+  start <- n+1
+  while(is.na(last[1])) {
+    last[1:(n-1)] <- last[2:n]
+    last[n] <- ts[n]
+    start <- start + 1
+  }
+  for (i in start:length(ts)) {
+    if (length(which(is.na(last))) == n) {
+      m[i] <- NA
+    } else {
+      m[i] <- sum(last, na.rm = TRUE) / length(which(! is.na(last)))
+    }
+    m[1:(n-1)] <- m[2:n]
+    m[n] <- ts[i]
+  }
+  m
+}
+
 convert.ts.df <- function(df,
 					      raw.to.return = NULL, 
 					      raw.to.log = NULL,
@@ -157,28 +197,34 @@ convert.ts.df <- function(df,
 	df
 }
 
-windowize.ts <- function(ts, n, name = NULL) {
-	if (n > 0) {
-		ts.pad <- c(rep(NA, n), ts, rep(NA, n))
-		wiz <- matrix(nrow = length(ts), ncol = (n + 1))
-		colnames <- vector(mode = "character", length = (n + 1))
+windowize.ts <- function(ts, n, name = NULL, single = FALSE) {
+	if (single == FALSE) {
+  	if (n > 0) {
+	    ts.pad <- c(rep(NA, n), ts, rep(NA, n))
+		  wiz <- matrix(nrow = length(ts), ncol = (n + 1))
+		  colnames <- vector(mode = "character", length = (n + 1))
 	
-		i <- seq_along(ts)
-		j <- i + n
+	    i <- seq_along(ts)
+	    j <- i + n
 		
-		for (k in 1:(n+1))
-			wiz[i,k] <- ts.pad[j + k - n - 1]
+		  for (k in 1:(n+1))
+	    	wiz[i,k] <- ts.pad[j + k - n - 1]
 		
-		wiz <- as.data.frame(wiz)
+  	  wiz <- as.data.frame(wiz)
 	
-		l <- n:0
-		colnames <- paste(name, "_lag", l, sep = "")
-		names(wiz) <- colnames
-		wiz
+	    l <- n:0
+	    colnames <- paste(name, "_lag", l, sep = "")
+		  names(wiz) <- colnames
+  	  wiz
+    } else {
+	    wiz <- data.frame(ts)
+	    names(wiz) <- paste(name, "_lag0")
+	 	  wiz
+	  }
 	} else {
-		wiz <- data.frame(ts)
-		names(wiz) <- paste(name, "_lag0")
-		wiz
+	  wiz <- rep(NA, length(ts))
+	  wiz[(n+1):length(wiz)] <- ts[1:(length(x) - n)]
+	  wiz
 	}
 }
 
