@@ -20,10 +20,7 @@
 # form. If the vector n is of length 1, it will use the same lags for each time 
 # series; otherwise, it will recycle the vector. A column in the original data
 # frame named "mydata" will be transformed into n columns of the windowized
-# data frame named "mydata_lag0"... "mydata_lagn". Alternatively, windows may
-# be mixed with single lags by specifying n as a list of vectors. For instance,
-# if n = list(5, c(1:2, 5), NA), then the resulting data frame will contain the
-# columns col1_lag0, col1_lag5, col2_lag5, col2_lag2, col2_lag1, col3_lag0.
+# data frame named "mydata_lag0"... "mydata_lagn". 
 #
 # make.moving average takes a time series vector and a window n and returns a 
 # vector of the form (..., (p_{t-1} + ... + p_{t-1-n})/n, (p_t + ... +
@@ -36,7 +33,8 @@
 # NA values. Setting the name parameter will create appropriate column names for
 # the resulting data frame.
 #
-# lag.ts converts a time series vector to its nth lag, padded with NA values.
+# make.lag.ts converts a time series vector to its nth lag, padded with NA
+# values.
 #
 # as.return.series converts a time series vector from the form (..., p_{t-1},
 # p_t, ...) to the form (..., (p_{t-1} - p_{t-2})/p_{t-2}, (p_t -
@@ -71,7 +69,11 @@
 # original dataset. The parameter timeout may optionally be specified to control # the length of time to wait for predictions before erroring (default is 3600 
 # seconds).
 #
-# plot.roll.forward plots the results
+# plot.roll.forward takes a vector of dates, an optional empirically
+# observed.series, and the result.series (output by a call to roll.forward).
+# If more than one variable has been rolled forwards, specify which to plot
+# with the to.plot parameter. Alpha-channel transparency can be set with the
+# transparency parameter.
 
 as.return.series <- function(ts) {
 	convert.ts(ts, function(ts, last) {(ts - last)/last})
@@ -139,24 +141,16 @@ convert.ts <- function(ts, fun, start = NULL) {
 }
 
 make.moving.average <- function(ts, n) {
-  m <- c()
-  last <- c()
-  m[1:n] <- NA
-  last[1:n] <- ts[1:n]
-  start <- n+1
-  while(is.na(last[1])) {
-    last[1:(n-1)] <- last[2:n]
-    last[n] <- ts[n]
-    start <- start + 1
-  }
-  for (i in start:length(ts)) {
-    if (length(which(is.na(last))) == n) {
-      m[i] <- NA
-    } else {
+  m <- vector(mode = "numeric", length = length(ts))
+  last <- vector(mode = "numeric", length = n)
+  m[1:(n-1)] <- NA 
+  last <- ts[1:n]
+  for (i in n:length(ts)) {
+    last[n] <- ts[i]
+    if (length(which(! is.na(last))) > 0) {
       m[i] <- sum(last, na.rm = TRUE) / length(which(! is.na(last)))
-    }
-    m[1:(n-1)] <- m[2:n]
-    m[n] <- ts[i]
+    } else m[i] <- NA
+    last[1:(n-1)] <- last[2:n]
   }
   m
 }
@@ -167,7 +161,7 @@ convert.ts.df <- function(df,
 					      raw.to.diff = NULL,
 					      return.to.raw = NULL,
 					      log.to.raw = NULL,
-						  diff.to.raw = NULL) {
+						    diff.to.raw = NULL) {
 	if (is.null(raw.to.return) && is.null(raw.to.log) &&
 	    is.null(raw.to.diff) && is.null(return.to.raw) &&
 	    is.null(log.to.raw) && is.null(diff.to.raw)) {
@@ -197,46 +191,38 @@ convert.ts.df <- function(df,
 	df
 }
 
-windowize.ts <- function(ts, n, name = NULL, single = FALSE) {
-	if (single == FALSE) {
-  	if (n > 0) {
-	    ts.pad <- c(rep(NA, n), ts, rep(NA, n))
-		  wiz <- matrix(nrow = length(ts), ncol = (n + 1))
-		  colnames <- vector(mode = "character", length = (n + 1))
+windowize.ts <- function(ts, n, name = NULL) {
+  wiz <- matrix(nrow = length(ts), ncol = (n + 1))
+  
+  for (k in 0:n)
+    wiz[,k] <- make.lag(ts, k)
 	
-	    i <- seq_along(ts)
-	    j <- i + n
-		
-		  for (k in 1:(n+1))
-	    	wiz[i,k] <- ts.pad[j + k - n - 1]
-		
-  	  wiz <- as.data.frame(wiz)
-	
-	    l <- n:0
-	    colnames <- paste(name, "_lag", l, sep = "")
-		  names(wiz) <- colnames
-  	  wiz
-    } else {
-	    wiz <- data.frame(ts)
-	    names(wiz) <- paste(name, "_lag0")
-	 	  wiz
-	  }
-	} else {
-	  wiz <- rep(NA, length(ts))
-	  wiz[(n+1):length(wiz)] <- ts[1:(length(x) - n)]
-	  wiz
-	}
+	wiz <- as.data.frame(wiz)
+  names(wiz) <- paste(name, "_lag", 0:n, sep = "")
+  }
+
+make.lag <- function(ts, n) {
+  if (n == 0) {
+    ts
+  } else if (n < length(ts)) {
+    l <- vector(mode = mode(ts), length(ts)) 
+    l[1:n] <- rep(NA, n)
+    l[(n+1):length(ts)] <- ts[1:(length(ts) - n)]
+    l
+  } else stop(paste("Invalid lag", n))
 }
 
 windowize.df <- function(df, n) {
-	n <- rep(n, length.out = dim(df)[2])
-	wf <- windowize.ts(df[,1], n[1], names(df)[1])
-	if (dim(df)[2] > 1) {
-		for (i in 2:dim(df)[2]) {
-			wf <- cbind(wf, windowize.ts(df[,i], n[i], names(df)[i]))
-		}
-	}
-	wf
+  if (! is.list(n)) {
+	  n <- rep(n, length.out = dim(df)[2])
+	  wf <- windowize.ts(df[,1], n[1], names(df)[1])
+	  if (dim(df)[2] > 1) {
+		  for (i in 2:dim(df)[2]) {
+			  wf <- cbind(wf, windowize.ts(df[,i], n[i], names(df)[i]))
+		  }
+	  }
+	  wf
+	} else stop(paste("Invalid lag", n))
 }
 
 roll.forward <- function(handle, dataset, pf, pf.lags, n, t, r,
@@ -329,16 +315,15 @@ plot.roll.forward <- function(dates, result.series, observed.series = NULL, to.p
 			series[[i]] <- result.series[[to.plot]][[i]]
 		}
 	}
-	
 	plot(dates, rep(NA, length(dates)), ylim = calculate.range(series), ...)
 	if (! is.null(observed.series)) {
 		lines(dates[1:length(observed.series)], observed.series)
 		for (i in seq_along(result.series[[to.plot]])) {
-			lines(dates[(length(observed.series) + 1):(length(observed.series) + length(result.series[[to.plot]][[i]]))], result.series[[to.plot]][[i]], col = "#00000001")
+			lines(dates[(length(observed.series) + 1):(length(observed.series) + length(result.series[[to.plot]][[i]]))], result.series[[to.plot]][[i]], col = paste("#000000", transparency, sep = ""))
 		}
 	} else {
 		for (i in seq_along(result.series[[to.plot]])) {
-			lines(dates[1:length(result.series[[to.plot]][[i]])], result.series[[to.plot]][[i]], col = "#00000001")
+			lines(dates[1:length(result.series[[to.plot]][[i]])], result.series[[to.plot]][[i]], col = paste("#000000", transparency, sep = ""))
 		}
 	}
 }
