@@ -195,11 +195,12 @@ windowize.ts <- function(ts, n, name = NULL) {
   wiz <- matrix(nrow = length(ts), ncol = (n + 1))
   
   for (k in 0:n)
-    wiz[,k] <- make.lag(ts, k)
+    wiz[,k+1] <- make.lag(ts, k)
 	
 	wiz <- as.data.frame(wiz)
   names(wiz) <- paste(name, "_lag", 0:n, sep = "")
-  }
+  wiz
+}
 
 make.lag <- function(ts, n) {
   if (n == 0) {

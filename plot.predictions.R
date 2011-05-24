@@ -38,19 +38,19 @@ plot.predictions <- function(dataset, predictions, target, n, type = NULL, by = 
 }
 
 predicted.scatterplot <- function(dataset, predictions, target, n, rgb = "000000", alpha = "33", col = NULL, xlab = "True Values", ylab = "Predicted Values", pch = 3, ...) {
-	true.values <- get.true.values(dataset, target)
-	predicted.values <- get.predicted.values(predictions, target)
+	true.values <- get.true.values(dataset, predictions, target, n)
+	predicted.values <- get.predicted.values(dataset, predictions, target, n)
 	
-	if (col == NULL) {
+	if (is.null(col)) {
 		col <- paste(rgb, alpha, sep = "")
 	}
 	
 	plot(predicted.values ~ rep(true.values, each = n), col = col, xlab = xlab, ylab = ylab, pch = pch, ...)
 }
 
-mean.scatterplot <- function (predictions, dataset, target, n, pch = 3, col = "#00000022", xlab = "True Values", ylab = "Predicted Values", ...) {
+mean.scatterplot <- function (dataset, predictions, target, n, pch = 3, col = "#00000022", xlab = "True Values", ylab = "Predicted Values", ...) {
 	
-	true.values <- get.true.values(dataset, target)
+	true.values <- get.true.values(dataset, predictions, target, n)
 	mean.predicted.values <- get.mean.predicted.values(dataset, predictions, target, n)
 	
 	plot(mean.predicted.values ~ true.values, pch = pch, col = col, xlab = xlab, ylab = ylab, ...)
@@ -108,13 +108,14 @@ percent.correct <- function(dataset, predictions, target, n) {
 	for (i in 1:numrows) {
 		range <- (((i - 1) * n) + 1):(i * n)
 		correct[i] <- sum(as.numeric(df[range, target] == as.numeric(as.data.frame(dataset[i, target]))))
+		#correct[i] <- sum(as.numeric(df[range, target] == as.numeric(as.character(dataset@data[i, target]))))
 		correct[i] <- (correct[i] / n)
 	}
 	
 	correct
 }
 
-plot.roc <- function(correct, parameters = (0:100)/100, show.reference = TRUE, main = "ROC Curve", ylab = "True Classification Rate", xlab = "Misclassification Rate", xlim = c(-0.005, 1.005), ylim = c(-0.005, 1.005), ...) {
+plot.roc <- function(correct, parameters = (0:100)/100, show.reference = TRUE, main = "ROC Curve", ylab = "True Classification Rate", xlab = "Misclassification Rate", xlim = c(-0.005, 1.005), ylim = c(-0.005, 1.005), add = FALSE, ...) {
 	incorrect <- 1 - correct
 	true_positives <- c()
 	false_positives <- c()
@@ -122,15 +123,27 @@ plot.roc <- function(correct, parameters = (0:100)/100, show.reference = TRUE, m
 		false_positives <- c(false_positives, length(incorrect[incorrect>i])/length(incorrect))
 		true_positives <- c(true_positives, length(correct[correct>i])/length(correct))
 	}
-	plot(true_positives ~ false_positives, type = "l", main = main, ylab = ylab, xlab = xlab, xlim = xlim, ylim = ylim, ...)
+	if (add == FALSE) {
+	  plot(true_positives ~ false_positives, type = "l", main = main, ylab = ylab, xlab = xlab, xlim = xlim, ylim = ylim, ...)
+	} else {
+	  lines(true_positives ~ false_positives, ...)
+	}
 	if (show.reference == TRUE) {
 		lines(c(0,1), c(0,1), type = "l", lty = 3) # random guesses
 	}
 }
 
 # Utility functions for scatterplots
-get.true.values <- function(dataset, target) {
-	dataset[,target]
+get.true.values <- function(dataset, predictions, target, n) {
+  l <- dim(predictions)[1]/n
+  gt <- vector(mode = "numeric", length = l)
+  
+  for (i in 1:l) {
+    gt[i] <- dataset@data[(((i - 1) * n) + 1), target]
+  }
+  
+  gt
+  
 }
 
 get.predicted.values <- function(dataset, predictions, target, n,
@@ -140,7 +153,7 @@ get.predicted.values <- function(dataset, predictions, target, n,
 							 		  fixed.cells.limit = 1000000,
 							 		  predicted.cells.limit = 2000000) {
 	if (class(predictions) == "veritable.predictions") {
-		predictions[,target]
+		predictions@data[,target]
 	} else if (length(predictions) == 1) {
 		predictions[[1]][,target]
 	} else {
@@ -162,8 +175,8 @@ get.predicted.values <- function(dataset, predictions, target, n,
 		j <- (((num.batches - 1) * rows.per.batch) + 1)
 		k <- (((num.batches - 1) * rows.per.batch) + dim(predictions[[num.batches]])[1])
 		predicted.values[j:k] <- predictions(num.batches)[,target]
+		predicted.values
 	}
-	predicted.values
 }
 
 get.mean.predicted.values <- function(dataset, predictions, target, n,
@@ -176,7 +189,7 @@ get.mean.predicted.values <- function(dataset, predictions, target, n,
 	rows.per.batch <- floor(fixed.cells.limit / (length(features(dataset)) - 1) / n) * n
 	num.batches <- ceiling(dim(dataset@data)[1] / rows.per.batch)
 	
-	mean.predicted.values <- vector(mode = "numeric", length = length(true.values))
+	mean.predicted.values <- c()
 	
 	for (i in 1:length(true.values)) {
 		j <- ((i - 1) * n) + 1
