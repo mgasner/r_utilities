@@ -93,6 +93,25 @@ predicted.hist <- function(dataset, predictions, target, n, by = NULL, ground.tr
 #
 # To do: allow the specification of a simple cost function
 
+calculate.auc <- function(dataset, predictions, target, n) {
+  if (class(predictions) == "veritable.predictions")
+    df <- predictions@data
+  else df <- predictions[[1]]@data
+  if (length(predictions) > 1) 
+    for (i in 2:length(predictions))
+      df <- rbind(df, predictions[[1]]@data)
+  
+  numrows <- dim(dataset@data)[1]
+  correct <- 0
+  
+  for (i in 1:numrows) {
+    range <- (((i - 1) * n) + 1):(i * n)
+    correct <- correct + sum(as.numeric(df[range, target] == as.numeric(as.data.frame(dataset[i, target]))))
+  }
+  
+  correct / (numrows * n)
+}
+
 percent.correct <- function(dataset, predictions, target, n) {
 	if (class(predictions) == "veritable.predictions")
 		df <- predictions@data
