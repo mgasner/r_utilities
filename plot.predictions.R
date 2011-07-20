@@ -126,7 +126,7 @@ percent.correct <- function(dataset, predictions, target, n) {
 	
 	for (i in 1:numrows) {
 		range <- (((i - 1) * n) + 1):(i * n)
-		correct[i] <- sum(as.numeric(df[range, target] == as.numeric(as.data.frame(dataset[i, target]))))
+		correct[i] <- sum(as.numeric(df[range, target] == dataset@data[i, target]))
 		#correct[i] <- sum(as.numeric(df[range, target] == as.numeric(as.character(dataset@data[i, target]))))
 		correct[i] <- (correct[i] / n)
 	}
